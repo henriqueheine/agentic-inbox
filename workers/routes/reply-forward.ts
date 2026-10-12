@@ -3,7 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import type { Context } from "hono";
-import { sendEmail } from "../email-sender";
+import { EmailSendError, sendEmail } from "../email-sender";
 import { storeAttachments } from "../lib/attachments";
 import type { EmailFull } from "../lib/schemas";
 import {
@@ -20,6 +20,19 @@ import type { MailboxContext } from "../lib/mailbox";
 
 type AppContext = Context<MailboxContext>;
 type RateLimitStub = { checkSendRateLimit: () => Promise<string | null> };
+
+function sendFailResponse(e: unknown): Response {
+	const err =
+		e instanceof EmailSendError
+			? e
+			: new EmailSendError(
+					e instanceof Error ? e.message : "Falha ao enviar e-mail",
+					"email_sending",
+					502,
+				);
+	console.error("Email delivery failed:", err.code, err.message);
+	return Response.json({ error: err.message, code: err.code }, { status: err.status });
+}
 
 export async function handleReplyEmail(c: AppContext) {
 	const mailboxId = c.req.param("mailboxId") ?? "";
@@ -55,6 +68,28 @@ export async function handleReplyEmail(c: AppContext) {
 
 	const attachmentData = await storeAttachments(c.env.BUCKET, messageId, attachments);
 
+	try {
+		await sendEmail(c.env, {
+			to,
+			cc,
+			bcc,
+			from,
+			subject,
+			html,
+			text,
+			attachments: attachments?.map((att) => ({
+				content: att.content,
+				filename: att.filename,
+				type: att.type,
+				disposition: att.disposition,
+				contentId: att.contentId,
+			})),
+			headers: buildThreadingHeaders(originalMsgId, references),
+		});
+	} catch (e) {
+		return sendFailResponse(e);
+	}
+
 	await stub.createEmail(
 		Folders.SENT,
 		{
@@ -87,29 +122,7 @@ export async function handleReplyEmail(c: AppContext) {
 
 	await stub.markThreadRead(thread_id);
 
-	c.executionCtx.waitUntil(
-		sendEmail(c.env.EMAIL, {
-			to,
-			cc,
-			bcc,
-			from,
-			subject,
-			html,
-			text,
-			attachments: attachments?.map((att) => ({
-				content: att.content,
-				filename: att.filename,
-				type: att.type,
-				disposition: att.disposition,
-				contentId: att.contentId,
-			})),
-			headers: buildThreadingHeaders(originalMsgId, references),
-		}).catch((e) => {
-			console.error("Deferred reply delivery failed:", (e as Error).message);
-		}),
-	);
-
-	return c.json({ id: messageId, status: "sent" }, 202);
+	return c.json({ id: messageId, status: "sent" }, 200);
 }
 
 export async function handleForwardEmail(c: AppContext) {
@@ -145,6 +158,27 @@ export async function handleForwardEmail(c: AppContext) {
 
 	const attachmentData = await storeAttachments(c.env.BUCKET, messageId, attachments);
 
+	try {
+		await sendEmail(c.env, {
+			to,
+			cc,
+			bcc,
+			from,
+			subject,
+			html,
+			text,
+			attachments: attachments?.map((att) => ({
+				content: att.content,
+				filename: att.filename,
+				type: att.type,
+				disposition: att.disposition,
+				contentId: att.contentId,
+			})),
+		});
+	} catch (e) {
+		return sendFailResponse(e);
+	}
+
 	await stub.createEmail(
 		Folders.SENT,
 		{
@@ -173,26 +207,5 @@ export async function handleForwardEmail(c: AppContext) {
 		attachmentData,
 	);
 
-	c.executionCtx.waitUntil(
-		sendEmail(c.env.EMAIL, {
-			to,
-			cc,
-			bcc,
-			from,
-			subject,
-			html,
-			text,
-			attachments: attachments?.map((att) => ({
-				content: att.content,
-				filename: att.filename,
-				type: att.type,
-				disposition: att.disposition,
-				contentId: att.contentId,
-			})),
-		}).catch((e) => {
-			console.error("Deferred forward delivery failed:", (e as Error).message);
-		}),
-	);
-
-	return c.json({ id: messageId, status: "sent" }, 202);
+	return c.json({ id: messageId, status: "sent" }, 200);
 }

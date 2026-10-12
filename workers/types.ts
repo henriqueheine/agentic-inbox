@@ -5,4 +5,8 @@
 export interface Env extends Cloudflare.Env {
 	POLICY_AUD: string;
 	TEAM_DOMAIN: string;
+	/** Cloudflare account id for Email Sending REST API. */
+	CF_ACCOUNT_ID: string;
+	/** API token with Email Sending:Edit (secret). */
+	EMAIL_API_TOKEN: string;
 }

@@ -13,15 +13,11 @@
 		// Production deploys must also define POLICY_AUD and TEAM_DOMAIN.
 		// TEAM_DOMAIN may be the base Access URL or the full /cdn-cgi/access/certs URL.
 		// The worker now fails closed outside local development if Access is not configured.
-		"DOMAINS": "homeblox.com.br",
-		"EMAIL_ADDRESSES": []
+		// EMAIL_API_TOKEN is a secret (wrangler secret put EMAIL_API_TOKEN).
+		"DOMAINS": "homeblox.com.br,laudomaker.com.br",
+		"EMAIL_ADDRESSES": [],
+		"CF_ACCOUNT_ID": "24d85ca7c8ab4bd05d5f4f96446c43a3"
 	},
-	"send_email": [
-		{
-			"name": "EMAIL",
-			"remote": true
-		}
-	],
 	"r2_buckets": [
 		{
 			"binding": "BUCKET",
